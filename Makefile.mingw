@@ -1,0 +1,31 @@
+export MINGW32 := D:\ProgramFiles\SysGCC\mingw32\bin
+export MINGW64 := D:\ProgramFiles\SysGCC\mingw64\bin
+
+INST32_PATH := \
+	E:/Documents/vs2019_workspace/xvcd_wpf_v1/xvcd_wpf_v1/Costura32
+
+INST64_PATH := \
+	E:/Documents/vs2019_workspace/xvcd_wpf_v1/xvcd_wpf_v1/Costura64
+
+all: build_libs install build_test
+
+build_libs:
+	@make -C output/library/mingw32 all
+	@make -C output/library/mingw64 all
+
+install: 
+	@echo 'copy x86 dlls...'
+	@for p in $(INST32_PATH); do echo "copy dll to $$p"; cp output/library/mingw32/*.dll $$p; done
+	@echo ''
+	@echo 'copy x86 dlls...'
+	@for p in $(INST64_PATH); do echo "copy dll to $$p"; cp output/library/mingw64/*.dll $$p; done
+	@echo ''
+
+build_test:
+	@make -C output/test/mingw64 all
+
+clean:
+	@make -C output/library/mingw64 clean
+	@make -C output/library/mingw32 clean
+	@make -C output/test/mingw64 clean
+	

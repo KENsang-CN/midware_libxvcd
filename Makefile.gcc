@@ -1,0 +1,12 @@
+all: build_libs build_test
+
+build_libs:
+	@make -C output/library/gcc all
+
+build_test:
+	@make -C output/test/gcc all
+
+clean:
+	@make -C output/library/gcc clean
+	@make -C output/test/gcc clean
+	
