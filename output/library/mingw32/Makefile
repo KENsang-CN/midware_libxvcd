@@ -13,7 +13,7 @@ CPPC := $(MINGW32)\g++
 LD := $(MINGW32)\gcc
 
 CC_FLAGS := -DCOMPILING_XVCD -DXVCD_DLL \
-	-I$(PWD)/../../../include -Wall -c -fmessage-length=0 -g3 -O0
+	-I$(PWD)/../../../include -Wall -c -fmessage-length=0 -O2
 CPPC_FLAGS := $(CC_FLAGS)
 LD_FLAGS := -shared -static -Wl,--output-def=$(LIBRARY_PREFIX)$(LIBRARY).def \
 	-L$(PWD)/../../../library/mingw32/ -lftd2xx -lws2_32 -lpthread

@@ -1,10 +1,10 @@
 /**
  ******************************************************************************
  * @file    xvcd.c
- * @author  *
- * @version V1.0
- * @history 2024-5-6 (V1.0), first edition
- * @date	5月. 6th, 2024
+ * @author  KEN
+ * @version V1.0.0
+ * @history 2024-05-06 (V1.0.0), first edition
+ * @date	May. 6th, 2024
  * @brief	* Function Implements
  ******************************************************************************
  * @attention

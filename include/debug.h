@@ -2,7 +2,8 @@
  ******************************************************************************
  * @file    debug.h
  * @author  KEN
- * @version V1.0
+ * @version V1.0.0
+ * @history 2021-02-27 (V1.0.0), first edition
  * @date	Feb. 27th, 2021
  * @brief	Debug Function Prototypes
  ******************************************************************************
@@ -35,14 +36,15 @@
 #define libdbg_dbg(fmt, args...) 		libdbg_tracelog((char*)(LIBDBG_DEBUG fmt), ##args)
 
 #define DEFAULT_LOG_FILE				"libxvcd.log"
-#define DEFAULT_TRACE_LEVEL				TRACELOG_INFO
-#define DEFAULT_LOG_LEVEL				TRACELOG_DEBUG
+#define DEFAULT_TRACE_LEVEL				TRACELOG_NOTICE
+#define DEFAULT_LOG_LEVEL				TRACELOG_INFO
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 void libdbg_tracelog(char *fmt, ...);
+void libdbg_hex_print(char *fmt, uint64_t phy, void *buf, int len, int align);
 
 void libdbg_logfile(char *file);
 void libdbg_tracelevel(int level);

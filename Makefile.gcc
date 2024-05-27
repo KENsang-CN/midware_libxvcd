@@ -9,4 +9,8 @@ build_test:
 clean:
 	@make -C output/library/gcc clean
 	@make -C output/test/gcc clean
-	
+
+release: build_libs
+	@mkdir -p release/libxvcd_gcc_static
+	@cp output/library/gcc/libxvcd.a release/libxvcd_gcc_static/
+	@cp include/libxvcd.h release/libxvcd_gcc_static/

@@ -1,10 +1,10 @@
 /**
  ******************************************************************************
  * @file    version.h
- * @author  *
- * @version V1.0
- * @history 2024-5-06 (V1.0), first edition
- * @date	5月. 6th, 2024
+ * @author  KEN
+ * @version V1.0.0
+ * @history 2024-05-06 (V1.0.0), first edition
+ * @date	May. 6th, 2024
  * @brief	* Function Prototypes
  ******************************************************************************
  * @attention
@@ -17,7 +17,7 @@
 
 #define VER_MAIN					1
 #define VER_PATCHLEVEL				0
-#define VER_SUBLEVEL				3
+#define VER_SUBLEVEL				4
 
 #ifndef __stringify
 #define __stringify_1(x...)			#x

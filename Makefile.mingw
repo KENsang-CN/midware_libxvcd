@@ -28,4 +28,15 @@ clean:
 	@make -C output/library/mingw64 clean
 	@make -C output/library/mingw32 clean
 	@make -C output/test/mingw64 clean
-	
+
+release: build_libs
+	@mkdir -p release/libxvcd_mingw32_shared
+	@cp output/library/mingw32/libxvcd.dll release/libxvcd_mingw32_shared/
+	@cp output/library/mingw32/libxvcd.def release/libxvcd_mingw32_shared/
+	@cp library/mingw32/ftd2xx.dll release/libxvcd_mingw32_shared/
+	@cp include/libxvcd.h release/libxvcd_mingw32_shared/
+	@mkdir -p release/libxvcd_mingw64_shared
+	@cp output/library/mingw64/libxvcd.dll release/libxvcd_mingw64_shared/
+	@cp output/library/mingw64/libxvcd.def release/libxvcd_mingw64_shared/
+	@cp library/mingw64/ftd2xx.dll release/libxvcd_mingw64_shared/
+	@cp include/libxvcd.h release/libxvcd_mingw64_shared/

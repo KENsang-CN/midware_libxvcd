@@ -13,7 +13,7 @@ CPPC := g++
 ar := ar
 
 CC_FLAGS := -DCOMPILING_XVCD -DXVCD_DLL \
-	-I$(PWD)/../../../include -c -fmessage-length=0 -g3 -O0
+	-I$(PWD)/../../../include -c -fmessage-length=0 -O2
 CPPC_FLAGS := $(CC_FLAGS)
 AR_FLAGS := 
 
