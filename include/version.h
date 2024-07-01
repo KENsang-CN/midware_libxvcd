@@ -17,7 +17,7 @@
 
 #define VER_MAIN					1
 #define VER_PATCHLEVEL				0
-#define VER_SUBLEVEL				4
+#define VER_SUBLEVEL				5
 
 #ifndef __stringify
 #define __stringify_1(x...)			#x

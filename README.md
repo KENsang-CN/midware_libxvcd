@@ -6,6 +6,6 @@
 
 - 支持XVC v1.0协议版本
 
-- 支持FTDI USB JTAG线缆 (FT232H/FT2232H)
+- 支持FTDI USB JTAG线缆 (FT232H/FT2232H/FT4232H)
 
 - 支持XVC协议扩展，包括XVC锁定

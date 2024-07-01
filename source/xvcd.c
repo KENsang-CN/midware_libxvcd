@@ -103,8 +103,13 @@ struct ftdi
 	void *parent;
 	int index;
 	FT_HANDLE dev;
+
+	int dev_model;
 	uint8_t gpiol_base_dir;
 	uint8_t gpiol_base_val;
+	uint8_t gpioh_base_dir;
+	uint8_t gpioh_base_val;
+
 	double req_tck_frequency;
 	double actual_tck_frequency;
 	bool last_tms;
@@ -141,6 +146,15 @@ typedef enum
 	STAGE_DATAT, /*threshold data*/
 	STAGE_CALLBACK, //
 } xvcd_stage_t;
+
+typedef enum
+{
+	MODEL_FT232H, //
+	MODEL_FT2232H, //
+	MODEL_FT4232H, //
+	MODEL_DIGILENT_HS3, //
+	MODEL_DIGILENT_SMT2, //
+} ftdi_device_model_t;
 
 struct xvcd
 {
@@ -179,6 +193,8 @@ struct xvcd
 
 #define Bit2Byte(bit)				(((bit) + 7) / 8)
 
+#define arrayof(x)								(sizeof(x)/sizeof(x[0]))
+
 /* Private macro -------------------------------------------------------------*/
 #define FT_TMS_MAX_SIZE				7
 #define FT_CLK_FREQ					60e6
@@ -205,6 +221,10 @@ static int ftdi_shift_out(struct ftdi *ftdi, uint8_t *tms, uint8_t *tdi,
 		int bitlen);
 static int ftdi_detach_sio(struct ftdi *ftdi);
 static int ftdi_attach_sio(struct ftdi *ftdi);
+
+static bool ftdi_string_search(void *buf, int len, const char *str);
+static int ftdi_get_device_model(struct ftdi *ftdi);
+static int ftdi_init_gpio(struct ftdi *ftdi);
 
 static int tcp_socket_open(struct tcp_socket *sock);
 static void tcp_socket_close(struct tcp_socket *sock);
@@ -331,6 +351,14 @@ static int ftdi_open(struct ftdi *ftdi)
 		goto DONE;
 	}
 
+	status = ftdi_get_device_model(ftdi);
+	if (status < 0)
+	{
+		libdbg_err("ftdi: get device model failed (%d)\n", status);
+		ret = -EBUSY;
+		goto DONE;
+	}
+
 	if (((status = FT_GetQueueStatus(ftdi->dev, &cnt)) == FT_OK) && (cnt > 0))
 	{
 		status = FT_Purge(ftdi->dev, FT_PURGE_RX | FT_PURGE_TX);
@@ -378,21 +406,13 @@ static int ftdi_open(struct ftdi *ftdi)
 		goto DONE;
 	}
 
-	ftdi->gpiol_base_dir = (FT_GPIO_OUTPUT << 7)
-			| (FT_GPIO_OUTPUT << FT_GPIO_TMS) | (FT_GPIO_OUTPUT << FT_GPIO_TDI)
-			| (FT_GPIO_OUTPUT << FT_GPIO_TCK);
-	ftdi->gpiol_base_val = (1U << 7);
+	ret = ftdi_init_gpio(ftdi);
+	if (ret < 0)
+	{
+		libdbg_err("ftdi: init gpio direction and value failed (%d)\n", ret);
+		goto DONE;
+	}
 
-	// Set initial states of the MPSSE interface - low byte, both pin directions and output values
-	// Pin name 	Signal 	Direction 	Config 	Initial State
-	// ADBUS0 		TCK 	output 1 	low 	0
-	// ADBUS1 		TDI 	output 1 	low 	0
-	// ADBUS2 		TDO 	input 0 			0
-	// ADBUS3 		TMS 	output 1 	high 	1
-	// ADBUS4 		GPIOL0 	input 0 			0
-	// ADBUS5 		GPIOL1 	input 0 			0
-	// ADBUS6 		GPIOL2 	input 0 			0
-	// ADBUS7 		GPIOL3 	output 1 	high	1
 	cnt = 0;
 	wbuf[cnt++] = FT_CMD_SET_GPIO_L;
 	wbuf[cnt++] = ftdi->gpiol_base_val | (1U << FT_GPIO_TMS); //value
@@ -405,20 +425,10 @@ static int ftdi_open(struct ftdi *ftdi)
 		goto DONE;
 	}
 
-	// Set initial states of the MPSSE interface - high byte, both pin directions and output values
-	// Pin name 	Signal 	Direction 	Config 	Initial State
-	// ACBUS0 		GPIOH0 	input 0 			0
-	// ACBUS1 		GPIOH1 	input 0 			0
-	// ACBUS2 		GPIOH2 	input 0 			0
-	// ACBUS3 		GPIOH3 	input 0 			0
-	// ACBUS4 		GPIOH4 	input 0 			0
-	// ACBUS5 		GPIOH5 	input 0 			0
-	// ACBUS6 		GPIOH6 	input 0 			0
-	// ACBUS7 		GPIOH7 	input 0 			0
 	cnt = 0;
 	wbuf[cnt++] = FT_CMD_SET_GPIO_H;
-	wbuf[cnt++] = 0x00; //value
-	wbuf[cnt++] = 0x00; //direction
+	wbuf[cnt++] = ftdi->gpioh_base_val; //value
+	wbuf[cnt++] = ftdi->gpioh_base_dir; //direction
 	status = FT_Write(ftdi->dev, wbuf, cnt, &cnt);
 	if (status != FT_OK)
 	{
@@ -460,7 +470,8 @@ static int ftdi_open(struct ftdi *ftdi)
 
 	ftdi->stack.wpos = ftdi->stack.rpos = 0;
 
-	DONE: if (ret < 0)
+DONE:
+	if (ret < 0)
 	{
 		ftdi_close(ftdi);
 	}
@@ -515,7 +526,8 @@ static int ftdi_set_tck_frequency(struct ftdi *ftdi, double freq)
 
 	ftdi->actual_tck_frequency = FT_CLK_FREQ / ((div + 1) * 2);
 
-	DONE: return ret;
+DONE:
+	return ret;
 }
 
 static void ftdi_set_tms(struct ftdi *ftdi, bool tms)
@@ -672,7 +684,8 @@ static int ftdi_shift_out(struct ftdi *ftdi, uint8_t *tms, uint8_t *tdi,
 		}
 	}
 
-	DONE: return ret;
+DONE:
+	return ret;
 }
 
 #if (defined(_WIN32) || defined(__WIN32__) || defined(_WIN64) || defined(__WIN64__))
@@ -779,11 +792,15 @@ static int ftdi_detach_sio(struct ftdi *ftdi)
 		}
 	}
 
-	FREE3: libusb_close(udev_handle);
-	FREE2: libusb_free_device_list(udev_list, 1);
-	FREE1: libusb_exit(uctx);
+FREE3:
+	libusb_close(udev_handle);
+FREE2:
+	libusb_free_device_list(udev_list, 1);
+FREE1:
+	libusb_exit(uctx);
 
-	DONE: return ret;
+DONE:
+	return ret;
 }
 
 static int ftdi_attach_sio(struct ftdi *ftdi)
@@ -878,11 +895,15 @@ static int ftdi_attach_sio(struct ftdi *ftdi)
 		}
 	}
 
-	FREE3: libusb_close(udev_handle);
-	FREE2: libusb_free_device_list(udev_list, 1);
-	FREE1: libusb_exit(uctx);
+FREE3:
+	libusb_close(udev_handle);
+FREE2:
+	libusb_free_device_list(udev_list, 1);
+FREE1:
+	libusb_exit(uctx);
 
-	DONE: return ret;
+DONE:
+	return ret;
 }
 
 static int ftdi_get_sysfs_name(char *buf, size_t size, libusb_device *dev)
@@ -943,9 +964,144 @@ static int ftdi_read_sysfs_prop(char *buf, char *sysfs_name, char *propname)
 
 	close(fd);
 
-	DONE: return ret;
+DONE:
+	return ret;
 }
 #endif
+
+static bool ftdi_string_search(void *buf, int len, const char *str)
+{
+	bool ret = false;
+	int slen = strlen(str) + 1, i;
+
+	if (len < slen)
+	{
+		goto DONE;
+	}
+
+	for (i = 0; i <= (len - slen); i++)
+	{
+		if (memcmp(buf + i, str, slen) == 0)
+		{
+			ret = true;
+			goto DONE;
+		}
+	}
+
+DONE:
+	return ret;
+}
+
+static int ftdi_get_device_model(struct ftdi *ftdi)
+{
+	int ret = 0;
+	FT_STATUS status;
+	DWORD uasize = 0, rcnt;
+	UCHAR uadata[1024 * 4];
+	char chipname[128];
+	char desc[128];
+
+	memset(chipname, 0, arrayof(chipname));
+	memset(desc, 0, arrayof(desc));
+
+	ret = ftdi_device_info(ftdi->index, chipname, NULL, NULL, desc);
+	if (ret < 0)
+	{
+		libdbg_warn("ftdi#%d get chipname failed (%d)\n", ftdi->index, ret);
+		goto DONE;
+	}
+
+	if (strcmp(chipname, "ft232h") == 0)
+	{
+		ftdi->dev_model = MODEL_FT232H;
+	} else if (strcmp(chipname, "ft2232h") == 0)
+	{
+		ftdi->dev_model = MODEL_FT2232H;
+	} else if (strcmp(chipname, "ft4232h") == 0)
+	{
+		ftdi->dev_model = MODEL_FT4232H;
+	} else
+	{
+		libdbg_warn("ftdi#%d unsupport ftdi device type <%s>\n", ftdi->index,
+				chipname);
+		ret = -EPERM;
+		goto DONE;
+	}
+
+	if ((status = FT_EE_UASize(ftdi->dev, &uasize)) != FT_OK)
+	{
+		libdbg_warn("ftdi#%d get eeprom user area size failed (%d)\n",
+				ftdi->index, status);
+		goto DONE;
+	}
+
+	if ((status = FT_EE_UARead(ftdi->dev, uadata, uasize, &rcnt)) != FT_OK)
+	{
+		libdbg_warn("ftdi#%d get eeprom user area data failed (%d)\n",
+				ftdi->index, status);
+		goto DONE;
+	}
+
+	if ((ftdi->dev_model == MODEL_FT232H)
+			&& ftdi_string_search(uadata, uasize, "Digilent JTAG-HS3"))
+	{
+		ftdi->dev_model = MODEL_DIGILENT_HS3;
+	} else if ((ftdi->dev_model == MODEL_FT232H)
+			&& ftdi_string_search(uadata, uasize, "Digilent JTAG-SMT2"))
+	{
+		ftdi->dev_model = MODEL_DIGILENT_SMT2;
+	} else
+	{
+		libdbg_info("ftdi#%d unmatched user area data for chip <%s>\n",
+				ftdi->index, chipname);
+		libdbg_hex_print(LIBDBG_INFO "user area data contents\n", 0x0, uadata,
+				uasize, 16);
+		goto DONE;
+	}
+
+DONE:
+	return ret;
+}
+
+static int ftdi_init_gpio(struct ftdi *ftdi)
+{
+	int ret = 0;
+
+	// Set initial states of the MPSSE interface - low byte, both pin directions and output values
+	// Pin name 	Signal 	Direction 	Config 	Initial State
+	// ADBUS0 		TCK 	output 1 	low 	0
+	// ADBUS1 		TDI 	output 1 	low 	0
+	// ADBUS2 		TDO 	input 0 			0
+	// ADBUS3 		TMS 	output 1 	high 	1
+	ftdi->gpiol_base_dir = (FT_GPIO_OUTPUT << FT_GPIO_TMS)
+			| (FT_GPIO_OUTPUT << FT_GPIO_TDI) | (FT_GPIO_OUTPUT << FT_GPIO_TCK);
+	ftdi->gpiol_base_val = 0;
+
+	// Pin name 	Signal 	Direction 	Config 	Initial State
+	// ACBUS0 		GPIOH0 	input 0 			0
+	// ACBUS1 		GPIOH1 	input 0 			0
+	// ACBUS2 		GPIOH2 	input 0 			0
+	// ACBUS3 		GPIOH3 	input 0 			0
+	// ACBUS4 		GPIOH4 	input 0 			0
+	// ACBUS5 		GPIOH5 	input 0 			0
+	// ACBUS6 		GPIOH6 	input 0 			0
+	// ACBUS7 		GPIOH7 	input 0 			0
+	ftdi->gpioh_base_dir = 0;
+	ftdi->gpioh_base_val = 0;
+
+	switch (ftdi->dev_model)
+	{
+		case MODEL_DIGILENT_HS3:
+		case MODEL_DIGILENT_SMT2:
+			//for TCK/TMS/TDI OE controlled by NC7WZ126
+			//which band to pin ADBUS7
+			ftdi->gpiol_base_dir |= (FT_GPIO_OUTPUT << 7);
+			ftdi->gpiol_base_val |= (1U << 7);
+			break;
+	}
+
+	return ret;
+}
 
 static int tcp_socket_open(struct tcp_socket *sock)
 {
@@ -1010,7 +1166,7 @@ static int tcp_socket_open(struct tcp_socket *sock)
 
 	goto DONE;
 
-	CLOSE:
+CLOSE:
 	socket_close(sock->local_sd);
 
 #ifdef WSA_PATCH
@@ -1021,7 +1177,8 @@ static int tcp_socket_open(struct tcp_socket *sock)
 	}
 #endif
 
-	DONE: return ret;
+DONE:
+	return ret;
 }
 
 static void tcp_socket_close(struct tcp_socket *sock)
@@ -1254,7 +1411,8 @@ static void xvcd_packer(struct xvcd *xvcd, struct timeval *tv)
 		tv->tv_usec = 0;
 	}
 
-	DONE: if (ret < 0)
+DONE:
+	if (ret < 0)
 	{
 		xvcd_com_close(xvcd);
 	}
@@ -1396,7 +1554,8 @@ static void xvcd_parser(struct xvcd *xvcd)
 		xvcd->rxbuf.wpos = xvcd->rxbuf.rpos = 0;
 	}
 
-	DONE: if (ret < 0)
+DONE:
+	if (ret < 0)
 	{
 		xvcd_com_close(xvcd);
 	}
@@ -1442,11 +1601,14 @@ static int xvcd_com_open(struct xvcd *xvcd)
 
 	goto DONE;
 
-	FREE2: free(xvcd->rxbuf.ptr);
+FREE2:
+	free(xvcd->rxbuf.ptr);
 
-	FREE1: ftdi_close(&xvcd->ftdi);
+FREE1:
+	ftdi_close(&xvcd->ftdi);
 
-	DONE: return ret;
+DONE:
+	return ret;
 }
 
 static void xvcd_com_close(struct xvcd *xvcd)
@@ -1551,7 +1713,8 @@ static int xvcd_settck_callback(struct xvcd *xvcd)
 	ret = socket_write(xvcd->sock.remote_sd, xvcd->txbuf.ptr, xvcd->txbuf.wpos);
 	xvcd->txbuf.wpos = 0;
 
-	DONE: return ret;
+DONE:
+	return ret;
 }
 
 static int xvcd_shift1_callback(struct xvcd *xvcd)
@@ -1675,7 +1838,8 @@ int version(char *ver)
 
 	ver[0] = 0, sprintf(ver, "%s, v%s", arch, LIB_VERSION_STRING);
 
-	DONE: return ret;
+DONE:
+	return ret;
 }
 
 int ftdi_device_scan(void)
@@ -1722,8 +1886,8 @@ int ftdi_device_info(int index, char *chipname, uint32_t *id,
 				strcpy(chipname, "ft4232h");
 				break;
 			default:
-				ret = -EPERM;
-				goto DONE;
+				sprintf(chipname, "%s", "unknown");
+				break;
 		}
 	}
 
@@ -1817,13 +1981,13 @@ int ftdi_device_info(int index, char *chipname, uint32_t *id, char *serialnum,
 		switch (udev_desc.idProduct)
 		{
 			case 0x6010:
-				sprintf(chipname, "%s", "FT2232H");
+				sprintf(chipname, "%s", "ft2232h");
 				break;
 			case 0x6011:
-				sprintf(chipname, "%s", "FT4232H");
+				sprintf(chipname, "%s", "ft4232h");
 				break;
 			case 0x6014:
-				sprintf(chipname, "%s", "FT232H");
+				sprintf(chipname, "%s", "ft232h");
 				break;
 			default:
 				sprintf(chipname, "%s", "unknown");
@@ -1842,10 +2006,13 @@ int ftdi_device_info(int index, char *chipname, uint32_t *id, char *serialnum,
 		ftdi_read_sysfs_prop(desc, sysfs_name, "product");
 	}
 
-	FREE2: libusb_free_device_list(udev_list, 1);
-	FREE1: libusb_exit(uctx);
+FREE2:
+	libusb_free_device_list(udev_list, 1);
+FREE1:
+	libusb_exit(uctx);
 
-	DONE: return ret;
+DONE:
+	return ret;
 }
 #endif
 
@@ -1892,13 +2059,17 @@ void* xvcd_start(int index, int port, int max_vector_len, double freq)
 
 	goto DONE;
 
-	FREE3: pthread_attr_destroy(&xvcd->thread_attr);
+FREE3:
+	pthread_attr_destroy(&xvcd->thread_attr);
 
-	FREE2: tcp_socket_close(&xvcd->sock);
+FREE2:
+	tcp_socket_close(&xvcd->sock);
 
-	FREE1: free(xvcd), xvcd = NULL;
+FREE1:
+	free(xvcd), xvcd = NULL;
 
-	DONE: return xvcd;
+DONE:
+	return xvcd;
 }
 
 void xvcd_stop(void *handle)

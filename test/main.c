@@ -71,6 +71,7 @@ static void ftdi_scan(void)
 	printf("ftdi found %d devices\n", dev_cnt);
 	for (i = 0; i < dev_cnt; i++)
 	{
+		chipname[0] = serialnum[0] = desc[0] = 0;
 		if (ftdi_device_info(i, chipname, &chipid, serialnum, desc) < 0)
 		{
 			printf("[%d] ?\n", i);
@@ -122,5 +123,6 @@ int main(int argc, char **argv)
 		sleep(1);
 	}
 
-	DONE: return ret;
+DONE:
+	return ret;
 }

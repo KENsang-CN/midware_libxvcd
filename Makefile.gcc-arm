@@ -1,0 +1,16 @@
+all: build_libs build_test
+
+build_libs:
+	@make -C output/library/gcc-arm all
+
+build_test: build_libs
+	@make -C output/test/gcc-arm all
+
+clean:
+	@make -C output/library/gcc-arm clean
+	@make -C output/test/gcc-arm clean
+
+release: build_libs
+	@mkdir -p release/libxvcd_gcc-arm_static
+	@cp output/library/gcc-arm/libxvcd.a release/libxvcd_gcc-arm_static/
+	@cp include/libxvcd.h release/libxvcd_gcc-arm_static/

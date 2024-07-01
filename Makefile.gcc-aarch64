@@ -1,0 +1,16 @@
+all: build_libs build_test
+
+build_libs:
+	@make -C output/library/gcc-aarch64 all
+
+build_test: build_libs
+	@make -C output/test/gcc-aarch64 all
+
+clean:
+	@make -C output/library/gcc-aarch64 clean
+	@make -C output/test/gcc-aarch64 clean
+
+release: build_libs
+	@mkdir -p release/libxvcd_gcc-aarch64_static
+	@cp output/library/gcc-aarch64/libxvcd.a release/libxvcd_gcc-aarch64_static/
+	@cp include/libxvcd.h release/libxvcd_gcc-aarch64_static/
